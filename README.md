@@ -1,5 +1,7 @@
 # TickTick ⇄ Google Tasks + Calendar
 
+[![tests](https://github.com/mobashirrahman/ticktick-gtasks-sync/actions/workflows/tests.yml/badge.svg)](https://github.com/mobashirrahman/ticktick-gtasks-sync/actions/workflows/tests.yml)
+
 **A free, self-hosted two-way sync between TickTick and Google — so your tasks show up where
 you actually look, and stay in sync no matter which side you tick them off from.**
 
