@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the TickTick to Google sync every 3 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=3min
+RandomizedDelaySec=30
+Persistent=true
+Unit=ttgtsync.service
+
+[Install]
+WantedBy=timers.target

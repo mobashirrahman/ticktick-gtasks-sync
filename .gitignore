@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Local configuration and credentials — never commit these
+secrets.json
+*.secret.json
+client_secret*.json
+
+# Runtime state
+*.db
+*.db-wal
+*.db-shm
+*.lock
+
+.DS_Store
+.env

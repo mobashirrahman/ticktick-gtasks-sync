@@ -1,0 +1,16 @@
+[Unit]
+Description=TickTick to Google Tasks/Calendar sync
+Documentation=file://%h/ttgtsync/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/ttgtsync
+Environment=PYTHONUNBUFFERED=1
+Environment=TTGTSYNC_CONFIG=%h/.config/ttgtsync/config.json
+Environment=TTGTSYNC_SECRETS=%h/.config/ttgtsync/secrets.json
+Environment=TTGTSYNC_STATE=%h/.local/state/ttgtsync/state.db
+ExecStart=/usr/bin/python3 %h/ttgtsync/sync.py run
+TimeoutStartSec=300
+Nice=10

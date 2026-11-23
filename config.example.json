@@ -1,0 +1,39 @@
+{
+  "ticktick": {
+    "api_base": "https://api.ticktick.com/open/v1"
+  },
+  "google": {
+    "tasks": {
+      "api_base": "https://tasks.googleapis.com/tasks/v1"
+    },
+    "calendar": {
+      "api_base": "https://www.googleapis.com/calendar/v3",
+      "id": "primary",
+      "timezone": "Europe/Berlin",
+      "lookback_days": 30,
+      "lookahead_days": 365
+    }
+  },
+  "duration": {
+    "default_minutes": 30,
+    "max_minutes": 480
+  },
+  "timed_tasks": {
+    "transparency": "opaque",
+    "on_complete": "delete",
+    "on_event_delete": "untime"
+  },
+  "lists": {
+    "include": [],
+    "exclude": []
+  },
+  "no_date": {
+    "include": false
+  },
+  "on_delete": "mirror",
+  "on_disappear": "complete",
+  "conflicts": "newest",
+  "recurring": "series",
+  "import_unmarked_events": false,
+  "purge_tombstones_days": 30
+}
