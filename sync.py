@@ -2,15 +2,16 @@
 """TickTick ↔ Google Tasks + Calendar sync.
 
 Usage:
-  sync.py                     run one reconciliation
-  sync.py --dry-run           show intended writes without performing them
-  sync.py auth ticktick --client-id ID --client-secret SECRET
-  sync.py auth google --client-json path/to/client_secret.json
-  sync.py status              recent runs
+  sync.py run [-v]            run one reconciliation (also the default with no command)
+  sync.py --dry-run run       show intended writes without performing them
+  sync.py auth ticktick [--client-id ID --client-secret SECRET]
+  sync.py auth google [--client-json path/to/client_secret.json]
+  sync.py status              last runs, list pairs, token ages
 """
 
 import argparse
 import fcntl
+import hmac
 import http.server
 import json
 import logging
@@ -77,6 +78,7 @@ def cmd_status(args):
     finally:
         store.close()
     secrets = oauth.Secrets(args.secrets)
+    cfg = config_mod.load(args.config)
     tokens = {}
     for app in ("ticktick", "google"):
         age = secrets.refresh_age_days(app)
@@ -87,7 +89,7 @@ def cmd_status(args):
                 if secrets.access_expiry_days(app) is not None else None
             ),
             "reauth_soon": bool(
-                (app == "google" and age is not None and age >= 6.5)
+                (app == "google" and config_mod.google_refresh_expiring(cfg, age))
                 or secrets.needs_reauth(app)
             ),
         }
@@ -98,6 +100,8 @@ def cmd_status(args):
 def cmd_auth(args):
     secrets = oauth.Secrets(args.secrets)
     redirect_uri = f"http://localhost:{args.port}/callback"
+    state = oauth.new_state()
+    verifier = None
     if args.provider == "ticktick":
         stored = secrets.entry("ticktick")
         client_id = args.client_id or stored.get("client_id")
@@ -106,15 +110,16 @@ def cmd_auth(args):
             print("auth ticktick needs --client-id/--client-secret or stored credentials",
                   file=sys.stderr)
             return 2
-        url = oauth.authorize_url_ticktick(client_id, redirect_uri)
+        url = oauth.authorize_url_ticktick(client_id, redirect_uri, state)
     else:
         client_id, client_secret = _google_credentials(args, secrets)
-        url = oauth.authorize_url_google(client_id, redirect_uri)
+        verifier, challenge = oauth.new_pkce_pair()
+        url = oauth.authorize_url_google(client_id, redirect_uri, state, challenge)
         secrets.update("google", client_id=client_id, client_secret=client_secret)
 
     print(f"\nOpen this URL in a browser on this machine:\n\n{url}\n", flush=True)
     print(f"Waiting for the redirect on {redirect_uri} (Ctrl-C to abort)…", flush=True)
-    code = _wait_for_code(args.port, args.timeout)
+    code = _wait_for_code(args.port, args.timeout, state)
     if not code:
         print("no authorization code received", file=sys.stderr)
         return 1
@@ -130,7 +135,7 @@ def cmd_auth(args):
             token_type=tokens.get("token_type"),
         )
     else:
-        tokens = oauth.exchange_google(code, client_id, client_secret, redirect_uri)
+        tokens = oauth.exchange_google(code, client_id, client_secret, redirect_uri, verifier)
         secrets.update(
             "google",
             access_token=tokens.get("access_token"),
@@ -170,13 +175,20 @@ def _google_client(path):
     return block["client_id"], block["client_secret"]
 
 
-def _wait_for_code(port, timeout):
+def _wait_for_code(port, timeout, expected_state):
     captured = {}
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):  # noqa: N802 - stdlib naming
             parsed = urllib.parse.urlparse(self.path)
             query = urllib.parse.parse_qs(parsed.query)
+            got_state = (query.get("state") or [""])[0]
+            if not hmac.compare_digest(got_state, expected_state):
+                # Not the redirect we started: ignore it and keep waiting.
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(b"state mismatch")
+                return
             if "code" in query:
                 captured["code"] = query["code"][0]
                 body = b"<html><body><h3>Authorized. You can close this tab.</h3></body></html>"
@@ -220,8 +232,11 @@ def main(argv=None):
     run.add_argument("--secrets", default=argparse.SUPPRESS)
     run.add_argument("--state", default=argparse.SUPPRESS)
     run.add_argument("--dry-run", action="store_true", default=argparse.SUPPRESS)
+    run.add_argument("-v", "--verbose", action="store_true", default=argparse.SUPPRESS)
 
     status = sub.add_parser("status", help="recent run history")
+    status.add_argument("--config", default=argparse.SUPPRESS)
+    status.add_argument("--secrets", default=argparse.SUPPRESS)
     status.add_argument("--state", default=argparse.SUPPRESS)
 
     auth = sub.add_parser("auth", help="one-time OAuth")

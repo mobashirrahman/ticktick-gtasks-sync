@@ -8,6 +8,8 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=%h/ttgtsync
 Environment=PYTHONUNBUFFERED=1
+# state.db holds task snapshots; keep everything the service writes private.
+UMask=0077
 Environment=TTGTSYNC_CONFIG=%h/.config/ttgtsync/config.json
 Environment=TTGTSYNC_SECRETS=%h/.config/ttgtsync/secrets.json
 Environment=TTGTSYNC_STATE=%h/.local/state/ttgtsync/state.db

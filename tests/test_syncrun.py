@@ -1,6 +1,6 @@
 import unittest
 
-from ttgtsync import config, merge
+from ttgtsync import config
 from ttgtsync.store import Store
 from ttgtsync.syncrun import Syncer, pick_masters
 

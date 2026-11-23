@@ -1,8 +1,10 @@
 """OAuth token storage and refresh for TickTick and Google."""
 
 import base64
+import hashlib
 import json
 import os
+import secrets as secrets_mod
 import time
 import urllib.error
 import urllib.parse
@@ -43,7 +45,20 @@ def form_post(url, fields, basic_auth=None, timeout=60):
         raise TokenError(f"{url} returned {exc.code}: {detail[:400]}") from exc
 
 
-def authorize_url_ticktick(client_id, redirect_uri, state="ttgtsync"):
+def new_state():
+    """Unguessable per-attempt OAuth state, checked on the callback (CSRF guard)."""
+    return secrets_mod.token_urlsafe(32)
+
+
+def new_pkce_pair():
+    """(verifier, S256 challenge) per RFC 7636."""
+    verifier = secrets_mod.token_urlsafe(64)
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return verifier, challenge
+
+
+def authorize_url_ticktick(client_id, redirect_uri, state):
     query = urllib.parse.urlencode(
         {
             "client_id": client_id,
@@ -56,9 +71,11 @@ def authorize_url_ticktick(client_id, redirect_uri, state="ttgtsync"):
     return f"{TICKTICK_AUTH_URL}?{query}"
 
 
-def authorize_url_google(client_id, redirect_uri, state="ttgtsync"):
+def authorize_url_google(client_id, redirect_uri, state, code_challenge):
     query = urllib.parse.urlencode(
         {
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
             "client_id": client_id,
             "redirect_uri": redirect_uri,
             "response_type": "code",
@@ -80,11 +97,12 @@ def exchange_ticktick(code, client_id, client_secret, redirect_uri):
     )
 
 
-def exchange_google(code, client_id, client_secret, redirect_uri):
+def exchange_google(code, client_id, client_secret, redirect_uri, code_verifier):
     return form_post(
         GOOGLE_TOKEN_URL,
         {
             "code": code,
+            "code_verifier": code_verifier,
             "grant_type": "authorization_code",
             "redirect_uri": redirect_uri,
             "client_id": client_id,
@@ -108,9 +126,13 @@ class Secrets:
         if parent:
             os.makedirs(parent, exist_ok=True)
         tmp = f"{self.path}.tmp"
-        with open(tmp, "w", encoding="utf-8") as handle:
+        # Create the file 0600 from the start so tokens are never world-readable,
+        # not even between open() and a later chmod().
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(self.data, handle, indent=2, sort_keys=True)
-        os.chmod(tmp, 0o600)
         os.replace(tmp, self.path)
 
     def entry(self, app):

@@ -12,7 +12,8 @@
       "timezone": "Europe/Berlin",
       "lookback_days": 30,
       "lookahead_days": 365
-    }
+    },
+    "oauth_app_status": "testing"
   },
   "duration": {
     "default_minutes": 30,

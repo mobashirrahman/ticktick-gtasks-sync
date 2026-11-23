@@ -1,0 +1,8 @@
+# Tooling config only — the project is stdlib-only and is not packaged.
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+
+[tool.ruff.lint]
+# Pyflakes + bugbear: real bugs, no style churn. Widen once the codebase is clean.
+select = ["F", "B"]

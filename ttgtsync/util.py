@@ -28,7 +28,13 @@ class HttpResult:
 
 
 def request(method, url, headers=None, body=None, timeout=60, retries=3, sleeper=time.sleep):
-    """Perform one HTTP request with bounded retries on 429/5xx."""
+    """Perform one HTTP request with bounded retries on 429/5xx.
+
+    429 is always retried: the server rejected the request before acting on it.
+    5xx and network errors are ambiguous (the write may have landed), so they are
+    only retried for idempotent methods; retrying a POST could create duplicates.
+    """
+    idempotent = method.upper() != "POST"
     data = None
     hdrs = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     hdrs.update(headers or {})
@@ -51,13 +57,13 @@ def request(method, url, headers=None, body=None, timeout=60, retries=3, sleeper
                     sleeper(min(delay, 60))
                     continue
                 return last
-            if 500 <= exc.code < 600 and attempt < retries:
+            if 500 <= exc.code < 600 and idempotent and attempt < retries:
                 sleeper(2 ** attempt)
                 continue
             return last
         except (urllib.error.URLError, TimeoutError) as exc:
             last = HttpResult(0, {}, str(exc))
-            if attempt < retries:
+            if idempotent and attempt < retries:
                 sleeper(2 ** attempt)
                 continue
             return last

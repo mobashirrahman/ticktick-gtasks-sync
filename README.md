@@ -16,7 +16,7 @@ Calendar but not back into Google Tasks. Google Tasks is a one-way street. The b
 offer real two-way sync are subscriptions that sit in the middle — another account, another bill,
 another copy of your task list on someone else's server.
 
-This is 800 lines of Python you run yourself. It talks to the TickTick Open API and the Google
+This is about 2,000 lines of Python you run yourself. It talks to the TickTick Open API and the Google
 Tasks/Calendar APIs directly, keeps the mapping in a local SQLite file, and costs nothing per
 month. If it breaks, you can read the code that broke.
 
@@ -87,7 +87,7 @@ Runs as a **systemd user service** (`Linger=yes`, so it survives logout and rebo
 | units | `~/.config/systemd/user/ttgtsync.{service,timer}` |
 
 ```bash
-# 1. deploy code + units (does not enable the timer)
+# 1. deploy code + units (runs tests first; does not enable the timer on a fresh install)
 HOST=you@your-server ./deploy/deploy.sh
 
 # 2. install config
@@ -144,7 +144,8 @@ configure the OAuth consent screen with scopes `https://www.googleapis.com/auth/
 `http://localhost:8080/callback`, then either pass the downloaded JSON (`--client-json`) or store
 the client id/secret and run `sync.py auth google`.
 
-Tokens land in `~/.config/ttgtsync/secrets.json` (mode 600) and refresh automatically.
+Tokens land in `~/.config/ttgtsync/secrets.json` (mode 600) and refresh automatically. Each
+`auth` uses a random `state` (callbacks that don't match are rejected) and Google also uses PKCE.
 
 ### Removing the 7-day refresh-token expiry
 
@@ -163,6 +164,8 @@ subdomain you control is fine.
    consent shows an "unverified app" warning you dismiss via *Advanced → continue*.
 5. **Re-run `sync.py auth google`** once so the stored refresh token is issued under the published
    status.
+6. **Set `"google": {"oauth_app_status": "published"}`** in `config.json` so `status` and the run
+   log stop warning about the 7-day expiry.
 
 Publishing status, not verification approval, is what stops the 7-day expiry.
 
@@ -192,6 +195,8 @@ See `config.example.json`. Notable keys:
 | Key | Default | Meaning |
 |---|---|---|
 | `google.calendar.id` | `primary` | calendar that receives timed blocks |
+| `google.calendar.timezone` | `Europe/Berlin` | IANA zone; an unknown name is a config error |
+| `google.oauth_app_status` | `testing` | `testing` warns before the 7-day token expiry; `published` doesn't |
 | `duration.default_minutes` | 30 | duration when no `#Nmin` tag |
 | `duration.max_minutes` | 480 | clamp for absurd tags |
 | `timed_tasks.on_complete` | `delete` | remove the block when done |
@@ -250,10 +255,11 @@ Conflicts resolve last-writer-wins (`conflicts: newest`), tie goes to TickTick.
 python3 -m unittest discover -s tests -t .
 ```
 
-58 tests, no network. They cover duration parsing, domain classification, both mapping directions,
-echo stability (encode → decode → encode must not drift), master-vs-occurrence selection, conflict
-resolution, the tombstone state machine, and the two-strike delete sweep. CI runs them on Python
-3.11–3.14.
+69 tests, no network. They cover duration parsing, config validation, OAuth state/PKCE,
+secrets-file permissions, retry safety (a `POST` is never retried after an ambiguous failure),
+domain classification, both mapping directions, echo stability (encode → decode → encode must not
+drift), master-vs-occurrence selection, conflict resolution, the tombstone state machine, and the
+two-strike delete sweep. CI runs them on Python 3.11–3.15, plus `ruff`.
 
 ---
 

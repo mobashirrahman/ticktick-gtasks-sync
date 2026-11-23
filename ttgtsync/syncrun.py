@@ -10,7 +10,7 @@ from .gcal import GoogleCalendar
 from .gtasks import GoogleTasks
 from .store import Store, load_snapshot
 from .ticktick import ApiError, TickTick
-from .util import canonical, parse_iso, sha256_json, utcnow, utcnow_iso
+from .util import canonical, sha256_json, utcnow, utcnow_iso
 
 log = logging.getLogger("ttgtsync")
 
@@ -43,10 +43,10 @@ class Syncer:
         self.calendar_id = cfg["google"]["calendar"]["id"]
         self.tz = cfg["google"]["calendar"]["timezone"]
         self.skip_recurring = cfg["recurring"] == "skip"
-        self.projects = {}
-        self.tt_tasks = {}
-        self.ops = []
-        self.run_pairs = []
+        self.projects: dict[str, dict] = {}
+        self.tt_tasks: dict[str, list[dict]] = {}
+        self.ops: list[dict] = []
+        self.run_pairs: list[dict] = []
 
     # ------------------------------------------------------------------ run
     def run(self):
@@ -85,7 +85,7 @@ class Syncer:
         """Testing-mode Google apps issue refresh tokens that die on day 7."""
         age = self.secrets.refresh_age_days("google")
         if age is not None:
-            if age >= 6.5:
+            if config_mod.google_refresh_expiring(self.cfg, age):
                 log.warning(
                     "google refresh token is %.1f days old; a Testing-mode app expires it at 7 days. "
                     "Run `sync.py auth google` or publish the OAuth app.", age
@@ -341,7 +341,7 @@ class Syncer:
         by_tt = pick_masters(events)
         self._recover_missing_masters(by_tt)
 
-        for project_id, tasks in self.tt_tasks.items():
+        for tasks in self.tt_tasks.values():
             for task in tasks:
                 if classify.should_skip(task, self.skip_recurring):
                     continue

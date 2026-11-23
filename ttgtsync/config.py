@@ -3,6 +3,7 @@
 import copy
 import json
 import os
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULTS = {
     "ticktick": {"api_base": "https://api.ticktick.com/open/v1"},
@@ -15,6 +16,7 @@ DEFAULTS = {
             "lookback_days": 30,
             "lookahead_days": 365,
         },
+        "oauth_app_status": "testing",
     },
     "duration": {"default_minutes": 30, "max_minutes": 480},
     "timed_tasks": {
@@ -39,6 +41,19 @@ VALID_ON_COMPLETE = {"delete", "keep"}
 VALID_CONFLICTS = {"newest", "tt", "gt"}
 VALID_RECURRING = {"series", "skip"}
 VALID_ON_DISAPPEAR = {"complete", "delete"}
+VALID_OAUTH_APP_STATUS = {"testing", "published"}
+
+# Google expires refresh tokens after 7 days while the OAuth app is in Testing.
+TESTING_REFRESH_WARN_DAYS = 6.5
+
+
+def google_refresh_expiring(cfg, age_days):
+    """True when a Testing-mode Google refresh token is about to die."""
+    return (
+        cfg["google"]["oauth_app_status"] == "testing"
+        and age_days is not None
+        and age_days >= TESTING_REFRESH_WARN_DAYS
+    )
 
 
 def _merge(base, overlay):
@@ -74,6 +89,15 @@ def _validate(cfg):
         raise ValueError(f"recurring must be one of {sorted(VALID_RECURRING)}")
     if cfg["on_disappear"] not in VALID_ON_DISAPPEAR:
         raise ValueError(f"on_disappear must be one of {sorted(VALID_ON_DISAPPEAR)}")
+    if cfg["google"]["oauth_app_status"] not in VALID_OAUTH_APP_STATUS:
+        raise ValueError(
+            f"google.oauth_app_status must be one of {sorted(VALID_OAUTH_APP_STATUS)}"
+        )
+    tz_name = cfg["google"]["calendar"]["timezone"]
+    try:
+        ZoneInfo(tz_name)
+    except (ZoneInfoNotFoundError, ValueError, TypeError) as exc:
+        raise ValueError(f"google.calendar.timezone {tz_name!r} is not a known IANA zone") from exc
     if int(cfg["duration"]["default_minutes"]) <= 0:
         raise ValueError("duration.default_minutes must be positive")
     if int(cfg["duration"]["max_minutes"]) < int(cfg["duration"]["default_minutes"]):
